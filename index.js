@@ -13,7 +13,7 @@ module.exports = function(homebridge)
 function HttpAccessory(log, config)
 {
     this.log = log;
-    
+
     // url info
     this.service                = config["service"] || "Switch";
     this.base_url               = config["base_url"];
@@ -22,10 +22,10 @@ function HttpAccessory(log, config)
     this.enable_level           = config["has_level_control"] || "no";
     this.invert_contact         = config["invert_contact"] || "no";
     this.include_video          = config["include_video"] || "yes";
-    
+
     if( this.service == "Security" || this.service == "Motion" || this.service == "Doorbell" || this.service == "Blinds" )
         this.enable_power_control = "no";
-    
+
     if( this.enable_power_control == "yes" )
     {
         if( this.service == "Garage Door" )
@@ -50,7 +50,7 @@ function HttpAccessory(log, config)
             this.off_body               = config["off_body"];
         }
     }
-   
+
     if( this.service == "Blinds" )
     {
 	this.level_url             = this.base_url + "/set_blinds_target/%t";
@@ -65,11 +65,15 @@ function HttpAccessory(log, config)
         this.get_target_heat_url   = this.base_url + "/heat_setpoint";
         this.get_target_cool_url   = this.base_url + "/cool_setpoint";
         this.get_temperature_url   = this.base_url + "/temperature";
-        
+
         this.cool_string = config["cool_string"] || "Cool";
+        this.cool_state = config["cool_state"] || Characteristic.TargetHeatingCoolingState.COOL;
         this.heat_string = config["heat_string"] || "Heat";
+        this.heat_state = config["heat_state"] || Characteristic.TargetHeatingCoolingState.HEAT;
         this.off_string = config["off_string"] || "Off";
+        this.off_state = config["off_state"] || Characteristic.TargetHeatingCoolingState.OFF;
         this.auto_string = config["auto_string"] || "Auto";
+        this.auto_state = config["auto_state"] || Characteristic.TargetHeatingCoolingState.AUTO;
     }
 
     var that = this;
@@ -80,16 +84,16 @@ function HttpAccessory(log, config)
     var key4Val = 0;
     var key5Val = 0;
     var key6Val = 0;
-    
+
     const requestHandler = (request, response) => {
         console.log(request.url)
-        
+
         var parts = request.url.split("/")
         var prop = parts[1]
         var value = parts[2]
-        
+
         console.log("Received update to property("+prop+") with value("+value+")")
-       
+
         if( that.service == "Keypad" )
         {
             var binaryState = parseInt(value.replace(/\D/g,""));
@@ -125,25 +129,25 @@ function HttpAccessory(log, config)
 		    that.key5Val = binaryState;
                     that.keypadService5.updateCharacteristic(Characteristic.ProgrammableSwitchEvent,binaryState);
                     break;
-                } 
-                case 6: 
+                }
+                case 6:
                 {
 		    that.key6Val = binaryState;
                     that.keypadService6.updateCharacteristic(Characteristic.ProgrammableSwitchEvent,binaryState);
                     break;
                 }
-                default: 
+                default:
                     break;
             }
             return;
         }
- 
+
         if( prop == 1000 )
         {
             var binaryState = parseInt(value.replace(/\D/g,""));
             that.state = binaryState > 0;
             that.log(that.service, "received power",that.status_url, "state is currently", binaryState);
-            
+
             // switch used to easily add additonal services
             that.enableSet = false;
             switch (that.service) {
@@ -221,7 +225,7 @@ function HttpAccessory(log, config)
                         }
                         if( that.state == toCheck && that.state != that.lastState ) {
                             that.lastSent = !that.lastSent;
-                            
+
                             that.doorbellService.getCharacteristic(Characteristic.ProgrammableSwitchEvent)
                             .setValue(that.lastSent?1:0);
                         }
@@ -278,7 +282,7 @@ function HttpAccessory(log, config)
         {
             that.currentlevel = parseInt(value);
             that.state = that.currentlevel > 0;
-            
+
             that.enableSet = false;
             switch (that.service) {
                 case "Light":
@@ -319,7 +323,7 @@ function HttpAccessory(log, config)
                     }
                     if( that.fanService ) {
                         that.log(that.service, "received fan level",that.brightnesslvl_url, "level is currently", that.currentlevel);
-                        
+
                         that.fanService.getCharacteristic(Characteristic.RotationSpeed)
                         .setValue(that.currentlevel*25);
                     }
@@ -378,7 +382,7 @@ function HttpAccessory(log, config)
 			}
 		    }
 		    break;
-		
+
 	        case "Security":
 		    that.httpRequest(that.status_url, "", "GET", that.username, that.password, that.sendimmediately, function(error, response, body)
 				 {
@@ -438,7 +442,7 @@ function HttpAccessory(log, config)
                           that.log(that.service, "current motion status is DECREASING");
                         }
                         var newBlindState = Characteristic.PositionState.STOPPED;
-                        if( that.blindPosition > lastBlindPosition ) {  
+                        if( that.blindPosition > lastBlindPosition ) {
                           if( that.blindTarget >= 0 && that.blindTarget == that.blindPosition ) {
                             newBlindState = Characteristic.PositionState.STOPPED;
                             that.log(that.service, "new motion status is STOPPED.  Current position has reached target.");
@@ -541,7 +545,7 @@ function HttpAccessory(log, config)
                         }
                         if( that.blindState == Characteristic.PositionState.DECREASING ) {
                           that.log(that.service, "current motion status is DECREASING");
-                        } 
+                        }
 
 			if( isClosing == 1 ) {
 			    that.blindState = Characteristic.PositionState.DECREASING;
@@ -563,54 +567,54 @@ function HttpAccessory(log, config)
 	}
         else if( prop == 1107 ) // HVAC Status
         {
-            var state = Characteristic.TargetHeatingCoolingState.OFF;
+            var state = that.off_state;
             if( value.includes(that.cool_string) )
-            {   
-                state = Characteristic.TargetHeatingCoolingState.COOL;
+            {
+                state = that.cool_state;
             }
             else if( value.includes(that.heat_string) )
-            {   
-                state = Characteristic.TargetHeatingCoolingState.HEAT;
+            {
+                state = that.heat_state;
             }
             else if( value.includes(that.auto_string) )
-            {   
-                state = Characteristic.TargetHeatingCoolingState.AUTO;
+            {
+                state = that.auto_state;
             }
-  
-            if( state >= 0 && state <= 2 )
+
+            if( state >= 0 && state <= 3 )
             {
               that.thermStatus = state;
               that.log(that.service, "received hvac status",that.get_status_url, "hvac status is currently", value);
-              that.thermostatService.getCharacteristic(Characteristic.CurrentHeatingCoolingState).setValue(state);  
+              that.thermostatService.getCharacteristic(Characteristic.CurrentHeatingCoolingState).setValue(state);
             }
             else
             {
               that.log(that.service, "received invalid hvac status",state,"from data",value);
-            } 
+            }
         }
         else if( prop == 1104 ) // HVAC Mode
         {
             that.enableSetTemp = false;
             that.enableSetState = false;
-            var state = Characteristic.TargetHeatingCoolingState.OFF;
+            var state = that.off_state;
             if( value == that.cool_string )
             {
-                state = Characteristic.TargetHeatingCoolingState.COOL;
+                state = that.cool_state;
             }
             else if( value == that.heat_string )
             {
-                state = Characteristic.TargetHeatingCoolingState.HEAT;
+                state = that.heat_state;
             }
             else if( value == that.auto_string )
             {
-                state = Characteristic.TargetHeatingCoolingState.AUTO;
+                state = that.auto_state;
             }
-            
+
             that.log(that.service, "received hvac mode",that.get_mode_url, "hvac mode is currently", state, "from value", value);
             that.thermTarState = state;
             that.thermostatService.getCharacteristic(Characteristic.TargetHeatingCoolingState).setValue(that.thermTarState);
-            
-            if( that.thermTarState == Characteristic.TargetHeatingCoolingState.AUTO)
+
+            if( that.thermTarState == that.auto_state)
             {
                 //Need to adjust the state here because HomeKit doesn't allow a current state of auto.
                 if( that.thermCurrentTemp != -100 && that.thermCoolSet != -100 && that.thermHeatSet != -100 )
@@ -618,30 +622,30 @@ function HttpAccessory(log, config)
                     var coolDiff = that.thermCurrentTemp - that.thermCoolSet;
                     if( coolDiff < 0 )
                         coolDiff = coolDiff*-1;
-                    
+
                     var heatDiff = that.thermCurrentTemp - that.thermHeatSet;
                     if( heatDiff < 0 )
                         heatDiff = heatDiff*-1;
-                    
+
                     if( coolDiff < heatDiff )
-                        state = Characteristic.TargetHeatingCoolingState.COOL;
+                        state = that.cool_state;
                     else
-                        state = Characteristic.TargetHeatingCoolingState.HEAT;
+                        state = that.heat_state;
                 }
                 else
                 {
-                    state = Characteristic.TargetHeatingCoolingState.OFF;
+                    state = that.off_state;
                 }
             }
-            
-            if( state == Characteristic.TargetHeatingCoolingState.COOL && that.thermCoolSet != -100 )
+
+            if( state == that.cool_state && that.thermCoolSet != -100 )
             {
                 if( that.thermCoolSet >= 10 && that.thermCoolSet <= 38 )
                   that.thermostatService.getCharacteristic(Characteristic.TargetTemperature).setValue(that.thermCoolSet);
                 else
                   that.log(that.service, "Cool setpoint is outside of valid range.  Cannot set target temperature: ",that.thermCoolSet);
             }
-            if( state == Characteristic.TargetHeatingCoolingState.HEAT && that.thermHeatSet != -100 )
+            if( state == that.heat_state && that.thermHeatSet != -100 )
             {
                 if( that.thermHeatSet >= 10 && that.thermHeatSet <= 38 )
                   that.thermostatService.getCharacteristic(Characteristic.TargetTemperature).setValue(that.thermHeatSet);
@@ -668,14 +672,14 @@ function HttpAccessory(log, config)
             that.enableSetTemp = false;
             that.enableSetState = false;
 
-            var state = Characteristic.TargetHeatingCoolingState.OFF;
+            var state = that.off_state;
             if( that.thermostatService )
             {
                 that.log(that.service, "received current heat setpoint",that.set_target_heat_url, "heat setpoint is currently", value);
                 that.thermHeatSet = parseFloat(value);
 
                 var state = that.thermTarState;
-                if( that.thermTarState == Characteristic.TargetHeatingCoolingState.AUTO)
+                if( that.thermTarState == that.auto_state)
                 {
                     //Need to adjust the state here because HomeKit doesn't allow a current state of auto.
                     if( that.thermCurrentTemp != -100 && that.thermCoolSet != -100 && that.thermHeatSet != -100 )
@@ -683,23 +687,23 @@ function HttpAccessory(log, config)
                         var coolDiff = that.thermCurrentTemp - that.thermCoolSet;
                         if( coolDiff < 0 )
                             coolDiff = coolDiff*-1;
-                        
+
                         var heatDiff = that.thermCurrentTemp - that.thermHeatSet;
                         if( heatDiff < 0 )
                             heatDiff = heatDiff*-1;
-                        
+
                         if( coolDiff < heatDiff )
-                            state = Characteristic.TargetHeatingCoolingState.COOL;
+                            state = that.cool_state;
                         else
-                            state = Characteristic.TargetHeatingCoolingState.HEAT;
+                            state = that.heat_state;
                     }
                     else
                     {
-                        state = Characteristic.TargetHeatingCoolingState.OFF;
+                        state = that.off_state;
                     }
                 }
-                
-                if( state == Characteristic.TargetHeatingCoolingState.HEAT )
+
+                if( state == that.heat_state )
                 {
                     if( that.thermHeatSet >= 10 && that.thermHeatSet <= 38 )
                       that.thermostatService.getCharacteristic(Characteristic.TargetTemperature).setValue(that.thermHeatSet);
@@ -720,8 +724,8 @@ function HttpAccessory(log, config)
                 that.log(that.service, "received current cool setpoint",that.set_target_cool_url, "cool setpoint is currently", value);
                 that.thermCoolSet = parseFloat(value);
 
-                var state = that.thermTarState;      
-                if( that.thermTarState == Characteristic.TargetHeatingCoolingState.AUTO)
+                var state = that.thermTarState;
+                if( that.thermTarState == that.auto_state)
                 {
                     //Need to adjust the state here because HomeKit doesn't allow a current state of auto.
                     if( that.thermCurrentTemp != -100 && that.thermCoolSet != -100 && that.thermHeatSet != -100 )
@@ -729,23 +733,23 @@ function HttpAccessory(log, config)
                         var coolDiff = that.thermCurrentTemp - that.thermCoolSet;
                         if( coolDiff < 0 )
                             coolDiff = coolDiff*-1;
-                        
+
                         var heatDiff = that.thermCurrentTemp - that.thermHeatSet;
                         if( heatDiff < 0 )
                             heatDiff = heatDiff*-1;
-                        
+
                         if( coolDiff < heatDiff )
-                            state = Characteristic.TargetHeatingCoolingState.COOL;
+                            state = that.cool_state;
                         else
-                            state = Characteristic.TargetHeatingCoolingState.HEAT;
+                            state = that.heat_state;
                     }
                     else
                     {
-                        state = Characteristic.TargetHeatingCoolingState.OFF;
+                        state = that.off_state;
                     }
                 }
-                
-                if( state == Characteristic.TargetHeatingCoolingState.COOL )
+
+                if( state == that.cool_state )
                 {
                     if( that.thermCoolSet >= 10 && that.thermCoolSet <= 38 )
                       that.thermostatService.getCharacteristic(Characteristic.TargetTemperature).setValue(that.thermCoolSet);
@@ -753,7 +757,7 @@ function HttpAccessory(log, config)
                       that.log(that.service,"Current cool setpoint is outside of range.  Cannot set target temperature: ",that.thermCoolSet);
                 }
             }
-            
+
             that.enableSetTemp = true;
             that.enableSetState = true;
         }
@@ -791,10 +795,10 @@ function HttpAccessory(log, config)
         }
         response.end('OK')
     }
-    
+
     const server = http.createServer(requestHandler)
     const port = this.base_url.substr(this.base_url.lastIndexOf('/')+1)*1+10000;
-    
+
     //console.log('Starting server on port '+port+' for service '+that.service)
     {
       server.listen(port, (err) =>
@@ -803,18 +807,18 @@ function HttpAccessory(log, config)
                     {
                       return console.log('something bad happened', err)
                     }
-                  
+
                     //console.log(`server is listening on ${port}`)
-                  
+
                     'use strict';
-                  
+
                     var os = require('os');
                     var ifaces = os.networkInterfaces();
-                  
+
                     Object.keys(ifaces).forEach(function (ifname)
                             {
                               var alias = 0;
-                                              
+
                               ifaces[ifname].forEach(function (iface)
                                    {
                                      if ('IPv4' !== iface.family || iface.internal !== false)
@@ -822,7 +826,7 @@ function HttpAccessory(log, config)
                                        // skip over internal (i.e. 127.0.0.1) and non-ipv4 addresses
                                        return;
                                      }
-                                                                     
+
                                      if (alias >= 1)
                                      {
                                        // this single interface has multiple ipv4 addresses
@@ -832,7 +836,7 @@ function HttpAccessory(log, config)
                                      {
                                        // this interface has only one ipv4 adress
                                        //console.log(ifname, iface.address);
-                                                                     
+
                                        //console.log("Calling: "+that.base_url+"/SetApplianceIP/"+iface.address)
                                        request(that.base_url+"/SetApplianceIP/"+iface.address,
                                                function (error, response, body)
@@ -848,7 +852,7 @@ function HttpAccessory(log, config)
                            });
                   })
     }
-    
+
     if( this.enable_status == "yes" )
     {
         if( this.service == "Light" || this.service == "Dimmer" || this.service == "Switch" || this.service == "Speaker" || this.service == "Fan" )
@@ -859,7 +863,7 @@ function HttpAccessory(log, config)
         else
             this.status_url = this.base_url + "/status";
     }
-    
+
     if( this.enable_level == "yes" )
     {
         if( this.service == "Fan" )
@@ -873,12 +877,12 @@ function HttpAccessory(log, config)
             this.brightnesslvl_url      = this.base_url + "/brightness";
         }
     }
-    
+
     if( this.service == "Security" )
     {
         this.state_url = this.base_url + "/state/%s";
     }
-    
+
     {
       this.http_method            = config["http_method"] 	  	 	|| "GET";;
       this.http_brightness_method = config["http_brightness_method"]  || this.http_method;
@@ -891,7 +895,7 @@ function HttpAccessory(log, config)
       this.serial                 = config["serial"]                  || "Unknown";
 
       this.refresh_interval       = config["refresh_interval"]        || 900000;
-      this.refresh_interval = this.refresh_interval + (Math.floor(Math.random()*300000) - 300000); // Random value between 10 and 20 minutes. 
+      this.refresh_interval = this.refresh_interval + (Math.floor(Math.random()*300000) - 300000); // Random value between 10 and 20 minutes.
       if( this.refresh_interval <= 0 )
         this.refresh_interval = 900000 + (Math.floor(Math.random()*300000) - 300000);
       this.log(this.service, "set refresh interval to",this.refresh_interval);
@@ -899,7 +903,7 @@ function HttpAccessory(log, config)
       this.brightnessHandling     = config["brightnessHandling"] 	 	|| "no";
       this.switchHandling 	    = config["switchHandling"] 		 	|| "no";
     }
-    
+
     //realtime polling info
     this.state = false;
     this.lastSent = false;
@@ -916,13 +920,13 @@ function HttpAccessory(log, config)
     this.enableSet = true;
     this.enableSetState = true;
     this.enableSetTemp = true;
-    this.thermCurState = Characteristic.TargetHeatingCoolingState.OFF;
-    this.thermStatus = Characteristic.TargetHeatingCoolingState.OFF;
+    this.thermCurState = this.off_state;
+    this.thermStatus = this.off_state;
     this.thermHeatSet = -100;
     this.thermDisplayUnits = Characteristic.TemperatureDisplayUnits.CELSIUS;
     this.thermCoolSet = -100;
     this.thermCurrentTemp = -100;
-    this.thermTarState = Characteristic.TargetHeatingCoolingState.OFF;
+    this.thermTarState = this.off_state;
     this.garageCheck = -1;
 
     // Status Polling, if you want to add additional services that don't use switch handling you can add something like this || (this.service=="Smoke" || this.service=="Motion"))
@@ -933,7 +937,7 @@ function HttpAccessory(log, config)
         var curheatseturl = "";
         var curcoolseturl = "";
         var curtempurl = "";
-        
+
         if( this.service != "Thermostat" && this.service != "Blinds" )
         {
             var statusemitter = pollingtoevent(function(done)
@@ -951,7 +955,7 @@ function HttpAccessory(log, config)
                                                                     }
                                                                   })
                                                }, {longpolling:true,interval:this.refresh_interval,longpollEventName:"statuspoll"});
-                   
+
                     statusemitter.on("error", function(err, data) {
                       that.log('HTTP get power function failed: %s', err.message);
                     });
@@ -965,7 +969,7 @@ function HttpAccessory(log, config)
                                var binaryState = parseInt(data.replace(/\D/g,""));
                                that.state = binaryState > 0;
                                that.log(that.service, "received power",that.status_url, "state is currently", binaryState);
-                             
+
                                that.enableSet = false;
                                switch (that.service)
                                {
@@ -1039,7 +1043,7 @@ function HttpAccessory(log, config)
                                      if( that.state == toCheck && that.state != that.lastState )
                                      {
                                        that.lastSent = !that.lastSent;
-                                   
+
                                        that.doorbellService.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(that.lastSent?1:0);
                                      }
                                      that.lastState = that.state;
@@ -1156,12 +1160,12 @@ function HttpAccessory(log, config)
                                  }
 
                                  if (typeof data === 'string' || data instanceof String)
-                                 { 
+                                 {
                                  }
-                                 else 
+                                 else
                                  {
                                    that.log(that.service, "Error: Data provided to blind position poll is not a string.");
-                                   return; 
+                                   return;
                                  }
 
                                  if( !Number.isFinite(parseInt(data.trim())) )
@@ -1220,14 +1224,14 @@ function HttpAccessory(log, config)
                                  if( data == null || data.length == 0 )
                                    return;
 
-                                 var state = Characteristic.TargetHeatingCoolingState.OFF;
+                                 var state = that.off_state;
                                  if( data.includes(that.cool_string) )
                                  {
-                                    state = Characteristic.TargetHeatingCoolingState.COOL;
+                                    state = that.cool_state;
                                  }
                                  else if( data.includes(that.heat_string) )
                                  {
-                                    state = Characteristic.TargetHeatingCoolingState.HEAT;
+                                    state = that.heat_state;
                                  }
                                  that.thermCurState = state;
 
@@ -1261,7 +1265,7 @@ function HttpAccessory(log, config)
                                                                       }
                                                                     })
                                                  }, {longpolling:true,interval:this.refresh_interval+2000,longpollEventName:"hvacstatepoll"});
-            
+
             hvacmodeemitter.on("error", function(err,data) {
               that.log('HTTP get hvac state function failed: %s', err.message);
             });
@@ -1272,27 +1276,27 @@ function HttpAccessory(log, config)
                                  if( data == null || data.length == 0 )
                                    return;
 
-                                 var state = Characteristic.TargetHeatingCoolingState.OFF;
+                                 var state = that.off_state;
                                  if( data == that.cool_string )
                                  {
-                                    state = Characteristic.TargetHeatingCoolingState.COOL;
+                                    state = that.cool_state;
                                  }
                                  else if( data == that.heat_string )
                                  {
-                                    state = Characteristic.TargetHeatingCoolingState.HEAT;
+                                    state = that.heat_state;
                                  }
                                  else if( data == that.auto_string )
                                  {
-                                    state = Characteristic.TargetHeatingCoolingState.AUTO;
+                                    state = that.auto_state;
                                  }
-                               
+
                                  that.log(that.service, "received hvac mode",that.get_mode_url, "hvac mode is currently", data);
                                  that.thermTarState = state;
                                  that.enableSetState = false;
                                  that.thermostatService.getCharacteristic(Characteristic.TargetHeatingCoolingState).setValue(that.thermTarState);
                                  that.enableSetState = true;
 
-                                 if( that.thermTarState == Characteristic.TargetHeatingCoolingState.AUTO)
+                                 if( that.thermTarState == that.auto_state)
                                  {
                                     //Need to adjust the state here because HomeKit doesn't allow a current state of auto.
                                     if( that.thermCurrentTemp != -100 && that.thermCoolSet != -100 && that.thermHeatSet != -100 )
@@ -1300,31 +1304,31 @@ function HttpAccessory(log, config)
                                         var coolDiff = that.thermCurrentTemp - that.thermCoolSet;
                                         if( coolDiff < 0 )
                                             coolDiff = coolDiff*-1;
-                               
+
                                         var heatDiff = that.thermCurrentTemp - that.thermHeatSet;
                                         if( heatDiff < 0 )
                                             heatDiff = heatDiff*-1;
-                               
+
                                         if( coolDiff < heatDiff )
-                                            state = Characteristic.TargetHeatingCoolingState.COOL;
+                                            state = that.cool_state;
                                         else
-                                            state = Characteristic.TargetHeatingCoolingState.HEAT;
+                                            state = that.heat_state;
                                     }
                                     else
                                     {
-                                        state = Characteristic.TargetHeatingCoolingState.OFF;
+                                        state = that.off_state;
                                     }
                                  }
-                               
+
                                  that.enableSetTemp = false;
-                                 if( state == Characteristic.TargetHeatingCoolingState.COOL && that.thermCoolSet != -100 )
+                                 if( state == that.cool_state && that.thermCoolSet != -100 )
                                  {
                                     if( that.thermCoolSet >= 10 && that.thermCoolSet <= 38 )
                                       that.thermostatService.getCharacteristic(Characteristic.TargetTemperature).setValue(that.thermCoolSet);
                                     else
                                       that.log(that.service,"Current cool setpoint is outside of range.  Cannot set target temperature: ",that.thermCoolSet);
                                  }
-                                 if( state == Characteristic.TargetHeatingCoolingState.HEAT && that.thermHeatSet != -100 )
+                                 if( state == that.heat_state && that.thermHeatSet != -100 )
                                  {
                                     if( that.thermHeatSet >= 10 && that.thermHeatSet <= 38 )
                                       that.thermostatService.getCharacteristic(Characteristic.TargetTemperature).setValue(that.thermHeatSet);
@@ -1334,7 +1338,7 @@ function HttpAccessory(log, config)
                                  that.enableSetTemp = true;
                                });
           }
-         
+
           // Emitter for current heat setpoint
           {
                 curheatseturl = this.get_target_heat_url;
@@ -1353,9 +1357,9 @@ function HttpAccessory(log, config)
                                                                         }
                                                                       })
                                                      }, {longpolling:true,interval:this.refresh_interval+4000,longpollEventName:"hvacheatpoll"});
-                
+
                 hvacheatsetemitter.on("error", function(err, data) {
-                  that.log('HTTP get hvac heat setpoint function failed: %s', err.message); 
+                  that.log('HTTP get hvac heat setpoint function failed: %s', err.message);
                 });
 
                 hvacheatsetemitter.on("hvacheatpoll",
@@ -1369,7 +1373,7 @@ function HttpAccessory(log, config)
                                      that.log(that.service, "received hvac heat setpoint",that.get_target_heat_url, "hvac heat setpoint is currently", data);
 
                                      var state = that.thermTarState;
-                                     if( that.thermTarState == Characteristic.TargetHeatingCoolingState.AUTO)
+                                     if( that.thermTarState == that.auto_state)
                                      {
                                         //Need to adjust the state here because HomeKit doesn't allow a current state of auto.
                                         if( that.thermCurrentTemp != -100 && that.thermCoolSet != -100 && that.thermHeatSet != -100 )
@@ -1377,24 +1381,24 @@ function HttpAccessory(log, config)
                                             var coolDiff = that.thermCurrentTemp - that.thermCoolSet;
                                             if( coolDiff < 0 )
                                                 coolDiff = coolDiff*-1;
-                                      
+
                                             var heatDiff = that.thermCurrentTemp - that.thermHeatSet;
                                             if( heatDiff < 0 )
                                                 heatDiff = heatDiff*-1;
-                                      
+
                                             if( coolDiff < heatDiff )
-                                                state = Characteristic.TargetHeatingCoolingState.COOL;
+                                                state = that.cool_state;
                                             else
-                                                state = Characteristic.TargetHeatingCoolingState.HEAT;
+                                                state = that.heat_state;
                                         }
                                         else
                                         {
-                                            state = Characteristic.TargetHeatingCoolingState.OFF;
+                                            state = that.off_state;
                                         }
                                      }
 
                                      that.enableSetTemp = false;
-                                     if( state == Characteristic.TargetHeatingCoolingState.HEAT )
+                                     if( state == that.heat_state )
                                      {
                                        if( that.thermHeatSet >= 10 && that.thermHeatSet <= 38 )
                                          that.thermostatService.getCharacteristic(Characteristic.TargetTemperature).setValue(that.thermHeatSet);
@@ -1423,9 +1427,9 @@ function HttpAccessory(log, config)
                                                                            }
                                                                          })
                                                         }, {longpolling:true,interval:this.refresh_interval+6000,longpollEventName:"hvaccoolpoll"});
-                
+
                 hvaccoolsetemitter.on("error", function(err, data) {
-                  that.log('HTTP get hvac cool setpoint function failed: %s', err.message); 
+                  that.log('HTTP get hvac cool setpoint function failed: %s', err.message);
                 });
 
                 hvaccoolsetemitter.on("hvaccoolpoll",
@@ -1437,9 +1441,9 @@ function HttpAccessory(log, config)
                                         that.thermCoolSet = parseFloat(data);
 
                                         that.log(that.service, "received hvac cool setpoint",that.get_target_cool_url, "hvac cool setpoint is currently", data);
-                                      
+
                                         var state = that.thermTarState;
-                                        if( that.thermTarState == Characteristic.TargetHeatingCoolingState.AUTO)
+                                        if( that.thermTarState == that.auto_state)
                                         {
                                             //Need to adjust the state here because HomeKit doesn't allow a current state of auto.
                                             if( that.thermCurrentTemp != -100 && that.thermCoolSet != -100 && that.thermHeatSet != -100 )
@@ -1447,24 +1451,24 @@ function HttpAccessory(log, config)
                                                 var coolDiff = that.thermCurrentTemp - that.thermCoolSet;
                                                 if( coolDiff < 0 )
                                                     coolDiff = coolDiff*-1;
-                                      
+
                                                 var heatDiff = that.thermCurrentTemp - that.thermHeatSet;
                                                 if( heatDiff < 0 )
                                                     heatDiff = heatDiff*-1;
-                                      
+
                                                 if( coolDiff < heatDiff )
-                                                    state = Characteristic.TargetHeatingCoolingState.COOL;
+                                                    state = that.cool_state;
                                                 else
-                                                    state = Characteristic.TargetHeatingCoolingState.HEAT;
+                                                    state = that.heat_state;
                                             }
                                             else
                                             {
-                                                state = Characteristic.TargetHeatingCoolingState.OFF;
+                                                state = that.off_state;
                                             }
                                         }
 
                                         that.enableSetTemp = false;
-                                        if( state == Characteristic.TargetHeatingCoolingState.COOL )
+                                        if( state == that.cool_state )
                                         {
                                           if( that.thermCoolSet >= 10 && that.thermCoolSet <= 38 )
                                             that.thermostatService.getCharacteristic(Characteristic.TargetTemperature).setValue(that.thermCoolSet);
@@ -1474,7 +1478,7 @@ function HttpAccessory(log, config)
                                         that.enableSetTemp = true;
                                       });
             }
-            
+
           // Emitter for current temperature
           {
                 curtempurl = this.get_temperature_url;
@@ -1493,7 +1497,7 @@ function HttpAccessory(log, config)
                                                                            }
                                                                          })
                                                         }, {longpolling:true,interval:this.refresh_interval+8000,longpollEventName:"hvactemppoll"});
-                
+
                 hvactempemitter.on("error", function(err, data) {
                   that.log('HTTP get current temperature function failed: %s', err.message);
                 });
@@ -1506,14 +1510,14 @@ function HttpAccessory(log, config)
 
                                         that.thermCurrentTemp = parseFloat(data);
                                         that.log(that.service, "received current temperature",that.get_temperature_url, "temperature is currently", data);
- 
+
                                         if( that.thermCurrentTemp >= 10 && that.thermCurrentTemp <= 38 )
                                           that.thermostatService.getCharacteristic(Characteristic.CurrentTemperature).setValue(that.thermCurrentTemp);
                                         else
                                           that.log(that.service,"Received temperature that is outside of range.  Cannot set current temperature: ",that.thermCurrentTemp);
 
-                                        var state = Characteristic.TargetHeatingCoolingState.OFF;
-                                        if( that.thermTarState == Characteristic.TargetHeatingCoolingState.AUTO)
+                                        var state = that.off_state;
+                                        if( that.thermTarState == that.auto_state)
                                         {
                                             //Need to adjust the state here because HomeKit doesn't allow a current state of auto.
                                             if( that.thermCurrentTemp != -100 && that.thermCoolSet != -100 && that.thermHeatSet != -100 )
@@ -1521,19 +1525,19 @@ function HttpAccessory(log, config)
                                                 var coolDiff = that.thermCurrentTemp - that.thermCoolSet;
                                                 if( coolDiff < 0 )
                                                     coolDiff = coolDiff*-1;
-                                   
+
                                                 var heatDiff = that.thermCurrentTemp - that.thermHeatSet;
                                                 if( heatDiff < 0 )
                                                     heatDiff = heatDiff*-1;
-                                   
+
                                                 if( coolDiff < heatDiff )
-                                                    state = Characteristic.TargetHeatingCoolingState.COOL;
+                                                    state = that.cool_state;
                                                 else
-                                                    state = Characteristic.TargetHeatingCoolingState.HEAT;
+                                                    state = that.heat_state;
                                             }
                                             else
                                             {
-                                                state = Characteristic.TargetHeatingCoolingState.OFF;
+                                                state = that.off_state;
                                             }
                                         }
                                       });
@@ -1541,7 +1545,7 @@ function HttpAccessory(log, config)
 
         }
     }
-    
+
     // Brightness Polling
     if (this.brightnesslvl_url && this.brightnessHandling =="realtime")
     {
@@ -1561,7 +1565,7 @@ function HttpAccessory(log, config)
                                                                }
                                                              }) // set longer polling as slider takes longer to set value
                                           }, {longpolling:true,interval:this.refresh_interval,longpollEventName:"levelpoll"});
-        
+
         levelemitter.on("error", function(err, data) {
           that.log('HTTP get power function failed: %s', err.message);
         });
@@ -1576,7 +1580,7 @@ function HttpAccessory(log, config)
                           that.state = that.currentlevel > 0;
 
                           that.enableSet = false;
-                        
+
                           switch (that.service)
                           {
                             case "Light":
@@ -1605,7 +1609,7 @@ function HttpAccessory(log, config)
                                 that.log(that.service, "received volume",that.brightnesslvl_url, "volume is currently", that.currentlevel);
                                 that.speakerService.getCharacteristic(Characteristic.Volume).setValue(that.currentlevel);
                                 that.speakerService.getCharacteristic(Characteristic.Mute).setValue(that.currentlevel==0);
-                              } 
+                              }
                               break;
                             case "Fan":
                               if( that.currentLevel < 0 ) {
@@ -1665,11 +1669,11 @@ HttpAccessory.prototype =
                            var signed = url;
                            if( sig !== undefined && sig !== null && sig != "null" && sig.length > 0 && sig.length < 50 && !error )
                              signed = signed + "?" + sig;
-            
+
                            this.doRequest(signed,body,method,username,password,sendimmediately,callback,0);
                          }.bind(this));
                 },
-    
+
   doSetSecurityState: function(callback, errorCount)
                {
                    var that = this;
@@ -1711,7 +1715,7 @@ HttpAccessory.prototype =
                      callback(new Error("No security state url defined."));
                      return;
                    }
-        
+
                    this.secTarState = newState;
 
                    setTimeout(function() { this.doSetSecurityState(callback,0); }.bind(this),1000);
@@ -1721,7 +1725,7 @@ HttpAccessory.prototype =
                    callback();
                  }
                },
-    
+
   doSetPowerState: function(url,body,callback,errorCount)
                {
                  this.httpRequest(url, body, this.http_method, this.username, this.password, this.sendimmediately,
@@ -1743,7 +1747,7 @@ HttpAccessory.prototype =
                                         callback();
 
                                         if(this.garageService)
-                                        { 
+                                        {
                                           this.doRunGarageCheck();
                                         }
                                       }
@@ -1828,14 +1832,14 @@ HttpAccessory.prototype =
 
                    if( this.enable_level )
                      this.state = powerOn;
-        
+
                    if (!this.on_url || !this.off_url)
                    {
                      this.log.warn("Ignoring request; No power url defined.");
                      callback(new Error("No power url defined."));
                      return;
                    }
-        
+
                    if (powerOn)
                    {
                      url = this.on_url;
@@ -1847,7 +1851,7 @@ HttpAccessory.prototype =
                      url = this.off_url;
                      body = this.off_body;
                      this.log("Setting power state to off");
-                   } 
+                   }
 
                    this.doSetPowerState(url,body,callback,0);
                 }
@@ -1856,7 +1860,7 @@ HttpAccessory.prototype =
                   callback();
                 }
               },
-    
+
   doSetBrightness: function(callback, errorCount)
               {
                      var that = this;
@@ -1963,7 +1967,7 @@ HttpAccessory.prototype =
                  var that = this;
                  if( !this.enable_level )
                  {
-                   callback();
+                this.log("Set state disabled");   callback();
                    return;
                  }
 
@@ -1975,10 +1979,10 @@ HttpAccessory.prototype =
                      callback(new Error("No brightness url defined."));
                      return;
                    }
-        
+
                    if( this.service == "Fan" )
                        level = Math.round(level/25);
-        
+
                    this.currentlevel = level;
                    if( this.currentLevel < 0 ) {
                        this.currentLevel = 0;
@@ -1997,6 +2001,29 @@ HttpAccessory.prototype =
 
   doSetThermostatTargetHeatingCoolingState: function(url, state, callback, errorCount)
               {
+                   var mode = this.off_string;
+                   if( state == this.off_state )
+                   {
+                      mode = this.off_string;
+                   }
+                   else if( state == this.heat_state )
+                   {
+                      mode = this.heat_string;
+                   }
+                   else if( state == this.cool_state )
+                   {
+                      mode = this.cool_string;
+                   }
+                   else if( state == this.auto_state )
+                   {
+                      mode = this.auto_string;
+                   }
+
+                   this.thermTarState = mode;
+
+                   var url = this.set_mode_url.replace("%m", mode);
+
+                   this.log("Setting hvac mode to %s", mode);
                    this.httpRequest(url, "", "GET", this.username, this.password, this.sendimmediately,
                                     function(error, response, body)
                                     {
@@ -2015,7 +2042,7 @@ HttpAccessory.prototype =
                                         {
                                             this.log('HTTP HVAC mode function succeeded!');
 
-                                            if( that.thermTarState == Characteristic.TargetHeatingCoolingState.AUTO)
+                                            if( that.thermTarState == this.auto_state)
                                             {
                                              //Need to adjust the state here because HomeKit doesn't allow a current state of auto.
                                              if( that.thermCurrentTemp != -100 && that.thermCoolSet != -100 && that.thermHeatSet != -100 )
@@ -2029,25 +2056,25 @@ HttpAccessory.prototype =
                                                  heatDiff = heatDiff*-1;
 
                                                if( coolDiff < heatDiff )
-                                                 state = Characteristic.TargetHeatingCoolingState.COOL;
+                                                 state = this.cool_state;
                                                else
-                                                 state = Characteristic.TargetHeatingCoolingState.HEAT;
+                                                 state = this.heat_state;
                                               }
                                               else
                                               {
-                                                state = Characteristic.TargetHeatingCoolingState.OFF;
+                                                state = this.off_state;
                                               }
                                            }
 
                                            that.enableSetTemp = false;
-                                           if( state == Characteristic.TargetHeatingCoolingState.COOL && that.thermCoolSet != -100 )
+                                           if( state == this.cool_state && that.thermCoolSet != -100 )
                                            {
                                              if( that.thermCoolSet >= 10 && that.thermCoolSet <= 38 )
                                                that.thermostatService.getCharacteristic(Characteristic.TargetTemperature).setValue(that.thermCoolSet);
                                              else
                                                that.log(that.service,"Current cool setpoint is outside of range.  Cannot set target temperature: ",that.thermCoolSet);
                                            }
-                                           if( state == Characteristic.TargetHeatingCoolingState.HEAT && that.thermHeatSet != -100 )
+                                           if( state == this.heat_state && that.thermHeatSet != -100 )
                                            {
                                              if( that.thermHeatSet >= 10 && that.thermHeatSet <= 38 )
                                                that.thermostatService.getCharacteristic(Characteristic.TargetTemperature).setValue(that.thermHeatSet);
@@ -2069,14 +2096,14 @@ HttpAccessory.prototype =
                        callback();
                        return;
                    }
-                   
+
                    if( !this.set_mode_url )
                    {
                        this.log.warn("Ignoring request; No set mode url defined.");
                        callback(new Error("No set mode url defined."));
                        return;
                    }
-                   
+
                    var mode = this.off_string;
                    if( state == Characteristic.TargetHeatingCoolingState.OFF )
                    {
@@ -2094,13 +2121,13 @@ HttpAccessory.prototype =
                    {
                        mode = this.auto_string;
                    }
- 
+
                    this.thermTarState = state;
-                  
+
                    var url = this.set_mode_url.replace("%m", mode);
-                   
+
                    this.log("Setting hvac mode to %s", mode);
-                   this.doSetThermostatTargetHeatingCoolingState(url,state,callback,0);   
+                   this.doSetThermostatTargetHeatingCoolingState(url,state,callback,0);
                },
 
   doSetThermostatTargetTemp: function(url, callback, errorCount)
@@ -2134,7 +2161,7 @@ HttpAccessory.prototype =
                        callback();
                        return;
                    }
-                   
+
                    if( temp == -100 )
                      return;
 
@@ -2144,42 +2171,42 @@ HttpAccessory.prototype =
                        callback(new Error("Both set setpoint urls must be defined."));
                        return;
                    }
-        
+
                    var mode = this.thermTarState;
-                   if( mode == Characteristic.TargetHeatingCoolingState.OFF ||
-                       mode == Characteristic.TargetHeatingCoolingState.AUTO )
+                   if( mode == this.off_state ||
+                       mode == this.auto_state )
                    {
                        if( this.thermCurrentTemp != -100 && this.thermCoolSet != -100 && this.thermHeatSet != -100 )
                        {
                            var coolDiff = this.thermCurrentTemp - this.thermCoolSet;
                            if( coolDiff < 0 )
                                coolDiff = coolDiff*-1;
-                           
+
                            var heatDiff = this.thermCurrentTemp - this.thermHeatSet;
                            if( heatDiff < 0 )
                                heatDiff = heatDiff*-1;
-                           
+
                            if( coolDiff < heatDiff )
-                               mode = Characteristic.TargetHeatingCoolingState.COOL;
+                               mode = this.cool_state;
                            else
-                               mode = Characteristic.TargetHeatingCoolingState.HEAT;
+                               mode = this.heat_state;
                        }
                        else
                        {
-                           mode = Characteristic.TargetHeatingCoolingState.COOL;
+                           mode = this.cool_state;
                        }
                    }
-        
+
                    var url = this.set_target_heat_url.replace("%c",temp);
                    var modeString = "heat setpoint";
-                   if( mode == Characteristic.TargetHeatingCoolingState.COOL )
+                   if( mode == this.cool_state )
                    {
                        url = this.set_target_cool_url.replace("%c",temp);
                        modeString = "cool setpoint";
                    }
-        
+
                    this.log("Setting %s to %s", modeString, temp);
-        
+
                    this.httpRequest(url, "", "GET", this.username, this.password, this.sendimmediately,
                          function(error, response, body)
                          {
@@ -2201,20 +2228,20 @@ HttpAccessory.prototype =
                 this.log("Identify requested!");
                 callback(); // success
               },
-    
+
   getServices: function()
               {
                   var that = this;
-    
+
                   // you can OPTIONALLY create an information service if you wish to override
                   // the default values for things like serial number, model, etc.
                   var informationService = new Service.AccessoryInformation();
-    
+
                   informationService
                     .setCharacteristic(Characteristic.Manufacturer, this.manufacturer)
                     .setCharacteristic(Characteristic.Model, this.model)
                     .setCharacteristic(Characteristic.SerialNumber, this.serial);
-    
+
                   switch (this.service)
                   {
                       case "Switch":
@@ -2238,7 +2265,7 @@ HttpAccessory.prototype =
                           }
                           return [this.switchService];
                       }
-                          
+
                       case "Light":
                       case "Dimmer":
                       {
@@ -2259,7 +2286,7 @@ HttpAccessory.prototype =
                                     .on('set', this.setPowerState.bind(this));
                                   break;
                           }
-                          
+
                           // Brightness Polling
                           if (this.brightnessHandling == "realtime" || this.brightnessHandling == "yes")
                           {
@@ -2268,76 +2295,76 @@ HttpAccessory.prototype =
                                 .on('get', function(callback) {callback(null,that.currentlevel)})
                                 .on('set', this.setBrightness.bind(this));
                           }
-            
+
                           return [informationService, this.lightbulbService];
                           break;
                       }
-                          
+
                       case "Door":
                       {
                           this.doorService = new Service.Door(this.name);
                           this.doorService
                             .getCharacteristic(Characteristic.CurrentPosition)
                             .on('get', function(callback) {callback(null,that.state?0:100)});
-                          
+
                           this.doorService
                             .getCharacteristic(Characteristic.TargetPosition)
                             .on('get', function(callback) {callback(null,that.state?0:100)})
                             .on('set', this.setPowerState.bind(this));
-                          
+
                           this.doorService
                             .getCharacteristic(Characteristic.PositionState)
                             .on('get', function(callback) {callback(null,2)});
-                          
+
                           return [informationService, this.doorService];
                           break;
                       }
-                          
+
                       case "Window":
                       {
                           this.windowService = new Service.Window(this.name);
                           this.windowService
                             .getCharacteristic(Characteristic.CurrentPosition)
                             .on('get', function(callback) {callback(null,that.state?0:100)});
-                          
+
                           this.windowService
                             .getCharacteristic(Characteristic.TargetPosition)
                             .on('get', function(callback) {callback(null,that.state?0:100)})
                             .on('set', this.setPowerState.bind(this));
-                          
+
                           this.windowService
                             .getCharacteristic(Characteristic.PositionState)
                             .on('get', function(callback) {callback(null,2)});
-                          
+
                           return [informationService, this.windowService];
                           break;
                       }
-                          
+
                       case "Garage Door":
                       {
                           this.garageService = new Service.GarageDoorOpener(this.name);
                           this.garageService
                             .getCharacteristic(Characteristic.CurrentDoorState)
                             .on('get', function(callback) {callback(null,that.state?Characteristic.CurrentDoorState.CLOSED:Characteristic.CurrentDoorState.OPEN)});
-                          
+
                           this.garageService
                             .getCharacteristic(Characteristic.TargetDoorState)
                             .on('get', function(callback) {callback(null,that.targetGarageDoorState)})
                             .on('set', this.setPowerState.bind(this));
-                          
+
                           this.garageService
                             .getCharacteristic(Characteristic.ObstructionDetected)
                             .on('get', function(callback) {callback(null,false)});
-                          
+
                           return [informationService, this.garageService];
                           break;
                       }
-                         
+
 	              case "Blinds":
 		      {
 			  this.blindsService = new Service.WindowCovering(this.name);
 			  this.blindsService.getCharacteristic(Characteristic.CurrentPosition)
-			      .on('get', function(callback) 
+			      .on('get', function(callback)
                           {
                             if( !Number.isFinite(this.blindPosition) || this.blindPosition < 0 ) {
                               this.log(this.service, "current blind position is uninitialized. Calling to get current position from device.");
@@ -2374,16 +2401,16 @@ HttpAccessory.prototype =
                           }.bind(this))
 
 			  this.blindsService.getCharacteristic(Characteristic.TargetPosition)
-			      .on('get', function(callback) 
+			      .on('get', function(callback)
                           {
                             if( this.blindTarget < 0 ) {
                               this.log(this.service, "target blind position is uninitialized. Calling to get current target position from device.");
                               var blindurl = this.base_url + "/blinds_target";
                               this.httpRequest(blindurl, "", "GET", this.username, this.password, this.sendimmediately,
                                                           function(error, response, body)
-                                                          { 
+                                                          {
                                                             if (error)
-                                                            { 
+                                                            {
                                                               callback(error,null);
                                                             }
                                                             else
@@ -2423,12 +2450,12 @@ HttpAccessory.prototype =
                           this.lockService
                             .getCharacteristic(Characteristic.LockCurrentState)
                             .on('get', function(callback) {callback(null,!that.state?Characteristic.LockCurrentState.SECURED:Characteristic.LockCurrentState.UNSECURED)});
-                          
+
                           this.lockService
                             .getCharacteristic(Characteristic.LockTargetState)
                             .on('get', function(callback) {callback(null,!that.state?Characteristic.LockCurrentState.SECURED:Characteristic.LockCurrentState.UNSECURED)})
                             .on('set', this.setPowerState.bind(this));
-                          
+
                           return [informationService, this.lockService];
                           break;
                       }
@@ -2453,7 +2480,7 @@ HttpAccessory.prototype =
                           return [informationService, this.speakerService];
                           break;
                       }
-                          
+
                       case "Contact":
                       {
                           this.contactService = new Service.ContactSensor(this.name);
@@ -2466,11 +2493,11 @@ HttpAccessory.prototype =
                                 }
                                 callback(null,(that.state==toCheck)?Characteristic.ContactSensorState.CONTACT_DETECTED:Characteristic.ContactSensorState.CONTACT_NOT_DETECTED)
                                 });
-                          
+
                           return [informationService, this.contactService];
                           break;
                       }
-                          
+
                       case "Doorbell":
                       {
                           this.cameraService = new Service.CameraRTPStreamManagement(this.name);
@@ -2479,25 +2506,25 @@ HttpAccessory.prototype =
                             .getCharacteristic(Characteristic.ProgrammableSwitchEvent)
                             .on('get', function(callback) {
                                 callback(null,that.lastSent?1:0)});
-                          
+
                           if( this.include_video )
                               return [informationService, this.doorbellService, this.cameraService];
                           else
                               return [informationService, this.doorbellService];
                           break;
                       }
-                          
+
                       case "Motion":
                       {
                           this.motionService = new Service.MotionSensor(this.name);
                           this.motionService
                             .getCharacteristic(Characteristic.MotionDetected)
                             .on('get', function(callback) { callback(null,!that.state)});
-                          
+
                           return [informationService, this.motionService];
                           break;
                       }
-                          
+
                       case "Fan":
                       {
                           this.fanService = new Service.Fan(this.name);
@@ -2505,7 +2532,7 @@ HttpAccessory.prototype =
                             .getCharacteristic(Characteristic.On)
                             .on('get', function(callback) {callback(null,that.state)})
                             .on('set', this.setPowerState.bind(this));
-                          
+
                           // Brightness Polling
                           if (this.brightnessHandling == "realtime" || this.brightnessHandling == "yes")
                           {
@@ -2515,23 +2542,23 @@ HttpAccessory.prototype =
                                 .on('set', this.setBrightness.bind(this))
                                 .setProps({minStep:25});
                           }
-                          
+
                           return [informationService, this.fanService];
                           break;
                       }
-                          
+
                       case "Security":
                       {
                           this.securityService = new Service.SecuritySystem(this.name);
                           this.securityService
                             .getCharacteristic(Characteristic.SecuritySystemCurrentState)
                             .on('get', function(callback) {callback(null,that.secCurState)});
-                          
+
                           this.securityService
                             .getCharacteristic(Characteristic.SecuritySystemTargetState)
                             .on('get', function(callback) {callback(null,that.secTarState)})
                             .on('set', this.setSecurityState.bind(this));
-                          
+
                           return [informationService, this.securityService];
                           break;
                       }
@@ -2542,27 +2569,27 @@ HttpAccessory.prototype =
                           this.keypadService1.getCharacteristic(Characteristic.ServiceLabelIndex).on('get', function(callback) { callback(null,1) });
 			  this.keypadService1.getCharacteristic(Characteristic.ProgrammableSwitchEvent).on('get',function(callback) { callback(null,that.key1Val) });
 			  this.keypadService1.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setProps({minValue:0,maxValue:2});
-                      
+
                           this.keypadService2 = new Service.StatelessProgrammableSwitch("Button 2","Button 2");
                           this.keypadService2.getCharacteristic(Characteristic.ServiceLabelIndex).on('get', function(callback) { callback(null,2) });
 			  this.keypadService2.getCharacteristic(Characteristic.ProgrammableSwitchEvent).on('get',function(callback) { callback(null,that.key2Val) });
 			  this.keypadService2.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setProps({minValue:0,maxValue:2});
-                      
+
                           this.keypadService3 = new Service.StatelessProgrammableSwitch("Button 3","Button 3");
                           this.keypadService3.getCharacteristic(Characteristic.ServiceLabelIndex).on('get', function(callback) { callback(null,3) });
 			  this.keypadService3.getCharacteristic(Characteristic.ProgrammableSwitchEvent).on('get',function(callback) { callback(null,that.key3Val) });
 			  this.keypadService3.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setProps({minValue:0,maxValue:2});
-                       
+
                           this.keypadService4 = new Service.StatelessProgrammableSwitch("Button 4","Button 4");
                           this.keypadService4.getCharacteristic(Characteristic.ServiceLabelIndex).on('get', function(callback) { callback(null,4) });
 			  this.keypadService4.getCharacteristic(Characteristic.ProgrammableSwitchEvent).on('get',function(callback) { callback(null,that.key4Val) });
 			  this.keypadService4.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setProps({minValue:0,maxValue:2});
-                    
+
                           this.keypadService5 = new Service.StatelessProgrammableSwitch("Button 5","Button 5");
                           this.keypadService5.getCharacteristic(Characteristic.ServiceLabelIndex).on('get', function(callback) { callback(null,5) });
 			  this.keypadService5.getCharacteristic(Characteristic.ProgrammableSwitchEvent).on('get',function(callback) { callback(null,that.key5Val) });
 			  this.keypadService5.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setProps({minValue:0,maxValue:2});
-                       
+
                           this.keypadService6 = new Service.StatelessProgrammableSwitch("Button 6","Button 6");
                           this.keypadService6.getCharacteristic(Characteristic.ServiceLabelIndex).on('get', function(callback) { callback(null,6) });
 			  this.keypadService6.getCharacteristic(Characteristic.ProgrammableSwitchEvent).on('get',function(callback) { callback(null,that.key6Val) });
@@ -2577,44 +2604,44 @@ HttpAccessory.prototype =
                           this.thermostatService
                             .getCharacteristic(Characteristic.CurrentHeatingCoolingState)
                             .on('get', function(callback) { that.log("Thermostat get current state: "+that.thermStatus); callback(null,that.thermStatus)});
-                          
+
                           this.thermostatService
                             .getCharacteristic(Characteristic.TargetHeatingCoolingState)
                             .on('get', function(callback) { that.log("Thermostat get target state: "+that.thermTarState); callback(null,that.thermTarState)})
                             .on('set', this.setThermostatTargetHeatingCoolingState.bind(this));
-                          
+
                           this.thermostatService
                             .getCharacteristic(Characteristic.CurrentTemperature)
                             .on('get', function(callback) { that.log("Thermostat get current temp: "+that.thermCurrentTemp); callback(null,that.thermCurrentTemp)});
-                          
+
                           this.thermostatService
                             .getCharacteristic(Characteristic.TargetTemperature)
                             .on('get', function(callback)
                                        {
                                          that.log("Thermostat get target temp "+that.thermCurState);
-                                         if( that.thermTarState == Characteristic.TargetHeatingCoolingState.OFF ||
-                                             that.thermTarState == Characteristic.TargetHeatingCoolingState.AUTO )
+                                         if( that.thermTarState == that.off_state ||
+                                             that.thermTarState == that.auto_state )
                                          {
                                                 that.log("Temp from off mode");
                                                 //Need to adjust the state here because HomeKit doesn't allow a current state of auto.
-                                                var state = Characteristic.TargetHeatingCoolingState.OFF;
+                                                var state = that.off_state;
                                                 if( that.thermCurrentTemp != -100 && that.thermCoolSet != -100 && that.thermHeatSet != -100 )
                                                 {
                                                     var coolDiff = that.thermCurrentTemp - that.thermCoolSet;
                                                     if( coolDiff < 0 )
                                                         coolDiff = coolDiff*-1;
-                                
+
                                                     var heatDiff = that.thermCurrentTemp - that.thermHeatSet;
                                                     if( heatDiff < 0 )
                                                         heatDiff = heatDiff*-1;
-                                
+
                                                     if( coolDiff < heatDiff )
-                                                        state = Characteristic.TargetHeatingCoolingState.COOL;
+                                                        state = that.cool_state;
                                                     else
-                                                        state = Characteristic.TargetHeatingCoolingState.HEAT;
+                                                        state = that.heat_state;
                                                 }
-                                
-                                                if( state == Characteristic.TargetHeatingCoolingState.COOL )
+
+                                                if( state == that.cool_state )
                                                 {
                                                     that.log("Sending "+that.thermCoolSet);
                                                     callback(null,that.thermCoolSet);
@@ -2625,22 +2652,22 @@ HttpAccessory.prototype =
                                                     callback(null,that.thermHeatSet);
                                                 }
                                          }
-                                
-                                         else if( that.thermTarState == Characteristic.TargetHeatingCoolingState.COOL )
+
+                                         else if( that.thermTarState == that.cool_state )
                                            { that.log("Sending "+that.thermCoolSet); callback(null,that.thermCoolSet)}
-                              
-                                         else if( that.thermTarState == Characteristic.TargetHeatingCoolingState.HEAT )
+
+                                         else if( that.thermTarState == that.heat_state )
                                            { that.log("Sending "+that.thermHeatSet); callback(null,that.thermHeatSet)}
- 
+
                                          else { that.log("Sending "+that.thermCurrentTemp); callback(null,that.thermCurrentTemp) }
                                        })
                             .on('set', this.setThermostatTargetTemp.bind(this));
-                          
+
                           this.thermostatService
                             .getCharacteristic(Characteristic.TemperatureDisplayUnits)
                             .on('get', function(callback) {callback(null,that.thermDisplayUnits)})
                             .on('set', function(state,callback) { that.thermDisplayUnits = state; callback(); });
-                          
+
                           return [informationService, this.thermostatService];
                           break;
                       }
